@@ -1,13 +1,12 @@
 import os
-import re
-import json
+from urllib.parse import urlparse
+
 import requests
 from requests.exceptions import RequestException
 from flask import Flask, request, jsonify, abort, make_response, render_template_string
 
 app = Flask(__name__)
 
-# still intentionally flawed for the exercise
 app.config["SECRET_KEY"] = os.getenv("JWT_SECRET", "dev-secret-CHANGE-ME")
 app.config["JSON_SORT_KEYS"] = False
 
@@ -17,9 +16,9 @@ HOME = """
 <ul>
   <li><a href="/status">/status</a></li>
   <li><a href="/whoami">/whoami</a></li>
-  <li><a href="/fetch?url=https://example.com">/fetch</a> (⚠️ SSRF)</li>
-  <li><a href="/admin?token=...">/admin</a> (token)</li>
-  <li><a href="/docs">/docs</a> (pistes DevSecOps)</li>
+  <li><a href="/fetch?url=http://example.com">/fetch</a></li>
+  <li><a href="/admin?token=...">/admin</a></li>
+  <li><a href="/docs">/docs</a></li>
 </ul>
 <p><b>Note</b> : tout reste local. Les “flags” sont dans les variables d’environnement.</p>
 """
@@ -32,48 +31,57 @@ def index():
 def status():
     return jsonify({"service": "escape-app-expert", "ok": True})
 
-# Weak identity: trusts a header set by reverse proxy (not present here)
 @app.get("/whoami")
 def whoami():
     user = request.headers.get("X-User", "anonymous")
     resp = make_response(jsonify({"user": user}))
-    # intentionally weak cookie settings for workshop
     resp.set_cookie("session", "dev", httponly=False, samesite="Lax")
     return resp
 
-# SSRF: fetch arbitrary URL from server side
-# Pedagogical angle: should implement allowlist + block internal ranges + DNS rebinding protection
-
-
 @app.get("/fetch")
 def fetch():
-    url = request.args.get("url", "")
+    url = request.args.get("url", "").strip()
     if not url:
         return jsonify({"error": "Missing url parameter"}), 400
 
-    if url.startswith("file://"):
-        return jsonify({"error": "file:// URLs are not allowed"}), 400
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return jsonify({"error": "Invalid URL"}), 400
+
+    if parsed.scheme not in {"http", "https"}:
+        return jsonify({"error": "Only http and https URLs are allowed"}), 400
+
+    if not parsed.hostname:
+        return jsonify({"error": "Invalid hostname"}), 400
+
+    hostname = parsed.hostname.lower().strip()
+
+    # Blocage explicite des hôtes internes
+    blocked_hosts = {"localhost", "127.0.0.1", "::1", "vault"}
+    if hostname in blocked_hosts:
+        return jsonify({"error": "Access to this host is forbidden"}), 403
+
+    # Blocage simple des IP privées les plus classiques
+    if hostname.startswith("10.") or hostname.startswith("192.168.") or hostname.startswith("172.16."):
+        return jsonify({"error": "Access to this host is forbidden"}), 403
 
     try:
-        r = requests.get(url, timeout=2)
+        response = requests.get(url, timeout=2, allow_redirects=False)
         return (
-            r.text,
-            r.status_code,
-            {"Content-Type": r.headers.get("Content-Type", "text/plain")},
+            response.text,
+            response.status_code,
+            {"Content-Type": response.headers.get("Content-Type", "text/plain")}
         )
-    except RequestException as e:
-        # version pédagogique : message lisible côté client, sans stacktrace
-        return jsonify({
-            "error": "Upstream request failed",
-            "details": str(e)
-        }), 502
+    except RequestException:
+        return jsonify({"error": "Upstream request failed"}), 502
 
-# Admin protected by static token (still bad)
 @app.get("/admin")
 def admin():
     token = request.args.get("token", "")
     if token != os.getenv("ADMIN_TOKEN", ""):
         abort(403)
+
     return jsonify({
         "admin": True,
         "flag_supply_chain": os.getenv("FLAG_SUPPLY", "FLAG{missing}"),
@@ -92,6 +100,18 @@ def docs():
 </ol>
 <p>Tip: there is an internal service on the Docker network you should not be able to read from the web app.</p>
 """)
+
+@app.errorhandler(403)
+def forbidden(e):
+    return jsonify({"error": "access denied"}), 403
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({"error": "resource not found"}), 404
+
+@app.errorhandler(500)
+def internal_error(e):
+    return jsonify({"error": "internal server error"}), 500
 
 if __name__ == "__main__":
     debug = os.getenv("FLASK_DEBUG", "0") == "1"
