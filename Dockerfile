@@ -1,20 +1,22 @@
-# EXPERT Dockerfile (intentionally imperfect)
-FROM python:3.11-slim
+# 1. PINNER LA VERSION (Utiliser un digest ou une version précise, pas 'latest')
+FROM python:3.11-slim-bookworm
 
+# 2. RÉDUIRE LA SURFACE (Installer uniquement le nécessaire)
 WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates \
- && update-ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+# 3. PRINCIPE DU MOINDRE PRIVILÈGE (Créer un utilisateur non-root)
+RUN groupadd -g 10001 appuser && \
+    useradd -u 10001 -g appuser appuser
+    
+COPY . .
 
-# Still copies too much (students should add .dockerignore)
-COPY . /app
+# Donner les droits à l'utilisateur sur le dossier app
+RUN chown -R appuser:appuser /app
 
-RUN pip install --no-cache-dir -r web/requirements.txt && \
-    pip install --no-cache-dir -r vault/requirements.txt
+# 4. EXÉCUTER EN NON-ROOT
+USER appuser
 
-# Still runs as root (students should fix with USER)
-EXPOSE 5000 7000
-
-CMD ["python","web/app.py"]
+EXPOSE 5000
+CMD ["python", "app.py"]
