@@ -1,22 +1,29 @@
-# 1. PINNER LA VERSION (Utiliser un digest ou une version précise, pas 'latest')
+# 1. Version fixée (Pinning)
 FROM python:3.11-slim-bookworm
 
-# 2. RÉDUIRE LA SURFACE (Installer uniquement le nécessaire)
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 2. Sécurité système
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && update-ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
-# 3. PRINCIPE DU MOINDRE PRIVILÈGE (Créer un utilisateur non-root)
-RUN groupadd -g 10001 appuser && \
-    useradd -u 10001 -g appuser appuser
-    
+WORKDIR /app
+
+# 3. Installation des dépendances (optimisée pour le cache)
+COPY web/requirements.txt ./web/
+RUN pip install --no-cache-dir -r web/requirements.txt
+
+# 4. Copie du code (utilisera le .dockerignore automatiquement)
 COPY . .
 
-# Donner les droits à l'utilisateur sur le dossier app
-RUN chown -R appuser:appuser /app
+# 5. Création d'un utilisateur non-root (Indispensable pour la Mission 4)
+RUN useradd -m devsecuser && chown -R devsecuser /app
+USER devsecuser
 
-# 4. EXÉCUTER EN NON-ROOT
-USER appuser
-
+# 6. Exposition du port web uniquement (Réduction surface d'attaque)
 EXPOSE 5000
+
+# Se placer directement là où est le code
+WORKDIR /app/web
+# Lancer l'app qui est maintenant dans le dossier courant
 CMD ["python", "app.py"]
