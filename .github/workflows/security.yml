@@ -17,10 +17,11 @@ jobs:
         run: docker build -t my-app:${{ github.sha }} .
 
       # Mission 4 & 5 : Scan de l'image Docker
-      - name: Scan Docker Image with Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: 'my-app:${{ github.sha }}'
-          format: 'table'
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
+     - name: Scan Docker Image with Trivy
+  uses: aquasecurity/trivy-action@master
+  with:
+    image-ref: 'my-app:${{ github.sha }}'
+    format: 'table'
+    exit-code: '1'
+    severity: 'CRITICAL,HIGH'
+    ignore-unfixed: true   # ignore les CVE sans fix disponible

@@ -1,8 +1,9 @@
 FROM python:3.11-slim-bookworm
 
+
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates \
- && update-ca-certificates \
+ && apt-get install -y --no-install-recommends ca-certificates openssl \
+ && apt-get upgrade -y \
  && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m devsecuser
