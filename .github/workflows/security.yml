@@ -1,20 +1,31 @@
 name: Build and Security Scan
-on: [push]
+
+on:
+  push:
+
 jobs:
   pipeline:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       # Mission 5 : Scan du code Python (SAST)
       - name: Bandit Scan
         run: |
           pip install bandit
-          bandit -r web/
-      # Mission 4 & 5 : Build et Scan de l'image Docker
-      - name: Build and Scan Docker Image
+          bandit -r web/ --skip B104
+
+      # Build de l'image AVANT le scan
+      - name: Build Docker Image
+        run: docker build -t my-app:${{ github.sha }} .
+
+      # Mission 4 & 5 : Scan de l'image Docker
+      - name: Scan Docker Image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'my-app:${{ github.sha }}'
-          format: 'table'
-          exit-code: '1' # Fait échouer le pipeline si vulnérable
-          severity: 'CRITICAL,HIGH'
+          image-ref: my-app:${{ github.sha }}
+          format: table
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true

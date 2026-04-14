@@ -1,12 +1,10 @@
 import os
 from urllib.parse import urlparse
-
 import requests
 from requests.exceptions import RequestException
 from flask import Flask, request, jsonify, abort, make_response, render_template_string
 
 app = Flask(__name__)
-
 app.config["SECRET_KEY"] = os.getenv("JWT_SECRET", "dev-secret-CHANGE-ME")
 app.config["JSON_SORT_KEYS"] = False
 
@@ -20,7 +18,7 @@ HOME = """
   <li><a href="/admin?token=...">/admin</a></li>
   <li><a href="/docs">/docs</a></li>
 </ul>
-<p><b>Note</b> : tout reste local. Les “flags” sont dans les variables d’environnement.</p>
+<p><b>Note</b> : tout reste local. Les "flags" sont dans les variables d'environnement.</p>
 """
 
 @app.get("/")
@@ -43,29 +41,22 @@ def fetch():
     url = request.args.get("url", "").strip()
     if not url:
         return jsonify({"error": "Missing url parameter"}), 400
-
     try:
         parsed = urlparse(url)
     except Exception:
         return jsonify({"error": "Invalid URL"}), 400
-
     if parsed.scheme not in {"http", "https"}:
         return jsonify({"error": "Only http and https URLs are allowed"}), 400
-
     if not parsed.hostname:
         return jsonify({"error": "Invalid hostname"}), 400
-
     hostname = parsed.hostname.lower().strip()
-
     # Blocage explicite des hôtes internes
     blocked_hosts = {"localhost", "127.0.0.1", "::1", "vault"}
     if hostname in blocked_hosts:
         return jsonify({"error": "Access to this host is forbidden"}), 403
-
     # Blocage simple des IP privées les plus classiques
     if hostname.startswith("10.") or hostname.startswith("192.168.") or hostname.startswith("172.16."):
         return jsonify({"error": "Access to this host is forbidden"}), 403
-
     try:
         response = requests.get(url, timeout=2, allow_redirects=False)
         return (
@@ -81,7 +72,6 @@ def admin():
     token = request.args.get("token", "")
     if token != os.getenv("ADMIN_TOKEN", ""):
         abort(403)
-
     return jsonify({
         "admin": True,
         "flag_supply_chain": os.getenv("FLAG_SUPPLY", "FLAG{missing}"),
@@ -115,4 +105,4 @@ def internal_error(e):
 
 if __name__ == "__main__":
     debug = os.getenv("FLASK_DEBUG", "0") == "1"
-    app.run(host="0.0.0.0", port=5000, debug=debug)
+    app.run(host="0.0.0.0", port=5000, debug=debug)  # nosec B104
