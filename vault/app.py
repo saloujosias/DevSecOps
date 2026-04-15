@@ -19,7 +19,10 @@ def health():
 
 @app.get("/debug")
 def debug():
-    return jsonify(dict(os.environ))
+    return jsonify({
+        "status": "ok",
+        "env": "hidden"
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=7000)
