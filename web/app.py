@@ -1,5 +1,7 @@
 import os
 from urllib.parse import urlparse
+import jwt # N'oublie pas de l'installer : pip install PyJWT
+import datetime
 
 import requests
 from requests.exceptions import RequestException
@@ -78,16 +80,33 @@ def fetch():
 
 @app.get("/admin")
 def admin():
-    token = request.args.get("token", "")
-    if token != os.getenv("ADMIN_TOKEN", ""):
-        abort(403)
+    # On ne récupère plus le token dans l'URL (trop dangereux)
+    # On le récupère dans le header Authorization ou un Cookie sécurisé
+    auth_header = request.headers.get("Authorization")
+    
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Missing or invalid token format"}), 401
+
+    token = auth_header.split(" ")[1]
+
+    try:
+        # VERIFICATION : On utilise la SECRET_KEY pour vérifier que le token n'a pas été modifié
+        payload = jwt.decode(token, app.config["SECRET_KEY"], algorithms=["HS256"])
+        
+        # On vérifie si le rôle est bien admin
+        if payload.get("role") != "admin":
+            abort(403)
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"error": "Invalid token signature"}), 401
 
     return jsonify({
         "admin": True,
-        "flag_supply_chain": os.getenv("FLAG_SUPPLY", "FLAG{missing}"),
-        "hint": "Try auditing the pipeline scripts & dependencies. Also check internal services.",
+        "flag_supply_chain": os.getenv("FLAG_SUPPLY", "FLAG{SECURE_AUTH_SUCCESS}"),
+        "hint": "Authentification renforcée avec signature JWT.",
     })
-
 @app.get("/docs")
 def docs():
     return render_template_string("""
